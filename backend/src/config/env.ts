@@ -6,11 +6,25 @@ const optionalUrl = z.preprocess(
   z.string().url().optional()
 )
 
+const optionalRenderServiceUrl = z.preprocess(
+  (value) => {
+    if (
+      typeof value === 'string'
+      && value.endsWith('.onrender.com')
+      && !value.includes('://')
+    ) {
+      return `https://${value}`
+    }
+    return value === '' ? undefined : value
+  },
+  z.string().url().optional()
+)
+
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().min(1).max(65535).default(5000),
   FRONTEND_URL: optionalUrl,
-  AI_SERVICE_URL: optionalUrl,
+  AI_SERVICE_URL: optionalRenderServiceUrl,
   AI_SERVICE_INTERNAL_TOKEN: z.string().trim().min(32).optional(),
   SUPABASE_URL: optionalUrl,
   SUPABASE_ANON_KEY: z.string().min(1).optional(),
