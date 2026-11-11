@@ -1,0 +1,495 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum SkillCategory {
+  PROGRAMMING_LANGUAGE
+  FRAMEWORK
+  LIBRARY
+  DATABASE
+  CLOUD_DEVOPS
+  TOOL
+  SOFT_SKILL
+  DOMAIN
+  OTHER
+}
+
+enum ProficiencyLevel {
+  BEGINNER
+  ELEMENTARY
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum SkillEvidenceSource {
+  SELF_REPORTED
+  RESUME
+  ASSESSMENT
+  INTERVIEW
+  AI_INFERRED
+  OTHER
+}
+
+enum ResumeProcessingStatus {
+  UPLOADED
+  PROCESSING
+  PROCESSED
+  FAILED
+  ARCHIVED
+}
+
+enum ResumeAnalysisStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum RemoteStatus {
+  ONSITE
+  HYBRID
+  REMOTE
+  UNSPECIFIED
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  TEMPORARY
+  INTERNSHIP
+  APPRENTICESHIP
+  OTHER
+}
+
+enum JobSource {
+  EXTERNAL_PROVIDER
+  MANUAL
+}
+
+enum RoadmapStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum RoadmapGenerationSource {
+  DETERMINISTIC
+  AI
+}
+
+enum RoadmapPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum RoadmapItemStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  SKIPPED
+}
+
+enum ApplicationStatus {
+  SAVED
+  APPLIED
+  SCREENING
+  INTERVIEW
+  OFFER
+  REJECTED
+  WITHDRAWN
+}
+
+enum InterviewType {
+  TECHNICAL
+  BEHAVIORAL
+  SYSTEM_DESIGN
+  HR
+  MIXED
+  OTHER
+}
+
+enum InterviewDifficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum InterviewSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum InterviewQuestionType {
+  TECHNICAL
+  BEHAVIORAL
+  SYSTEM_DESIGN
+  SITUATIONAL
+  OTHER
+}
+
+enum ConversationStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum MessageRole {
+  SYSTEM
+  USER
+  ASSISTANT
+  TOOL
+}
+
+model User {
+  /// Must equal the UUID of the corresponding Supabase Auth user. This is a
+  /// local public-schema identifier; Prisma does not relate to auth.users.
+  id        String   @id @db.Uuid
+  email     String?  @unique @db.VarChar(320)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  profile           Profile?
+  skills            UserSkill[]
+  resumes           Resume[]
+  jobMatches        JobMatch[]
+  learningRoadmaps  LearningRoadmap[]
+  applications      Application[]
+  interviewSessions InterviewSession[]
+  conversations     Conversation[]
+
+  @@index([createdAt])
+}
+
+model Profile {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @unique @db.Uuid
+  displayName String?  @db.VarChar(160)
+  headline    String?  @db.VarChar(240)
+  summary     String?  @db.Text
+  location    String?  @db.VarChar(200)
+  websiteUrl  String?  @db.VarChar(2048)
+  githubUrl   String?  @db.VarChar(2048)
+  linkedinUrl String?  @db.VarChar(2048)
+  targetRole  String?  @db.VarChar(200)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Skill {
+  id             String        @id @default(uuid()) @db.Uuid
+  name           String        @db.VarChar(120)
+  normalizedName String        @unique @db.VarChar(120)
+  category       SkillCategory @default(OTHER)
+  createdAt      DateTime      @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime      @updatedAt @db.Timestamptz(6)
+
+  users UserSkill[]
+
+  @@index([category, normalizedName])
+}
+
+model UserSkill {
+  id              String              @id @default(uuid()) @db.Uuid
+  userId          String              @db.Uuid
+  skillId         String              @db.Uuid
+  proficiency     ProficiencyLevel    @default(INTERMEDIATE)
+  yearsExperience Decimal?            @db.Decimal(4, 1)
+  evidenceSource  SkillEvidenceSource @default(SELF_REPORTED)
+  evidence        String?             @db.Text
+  createdAt       DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime            @updatedAt @db.Timestamptz(6)
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  skill Skill @relation(fields: [skillId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, skillId])
+  @@index([skillId, proficiency])
+  @@index([userId, proficiency])
+}
+
+model Resume {
+  id               String                 @id @default(uuid()) @db.Uuid
+  userId           String                 @db.Uuid
+  originalFilename String                 @db.VarChar(255)
+  storageBucket    String                 @default("resumes") @db.VarChar(100)
+  storagePath      String                 @unique @db.VarChar(1024)
+  mimeType         String                 @db.VarChar(127)
+  fileSizeBytes    BigInt
+  checksum         String?                @db.VarChar(128)
+  processingStatus ResumeProcessingStatus @default(UPLOADED)
+  isActive         Boolean                @default(true)
+  createdAt        DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime               @updatedAt @db.Timestamptz(6)
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  analyses          ResumeAnalysis[]
+  jobMatches        JobMatch[]
+  applications      Application[]
+  sourceRoadmaps    LearningRoadmap[]  @relation("RoadmapSourceResume")
+  interviewSessions InterviewSession[]
+
+  @@index([userId, isActive])
+  @@index([userId, processingStatus])
+  @@index([userId, createdAt])
+}
+
+model ResumeAnalysis {
+  id                     String               @id @default(uuid()) @db.Uuid
+  resumeId               String               @db.Uuid
+  status                 ResumeAnalysisStatus @default(PENDING)
+  extractedText          String?              @db.Text
+  skills                 Json?                @db.JsonB
+  experienceSummary      String?              @db.Text
+  education              Json?                @db.JsonB
+  strengths              Json?                @db.JsonB
+  improvementSuggestions Json?                @db.JsonB
+  provider               String?              @db.VarChar(100)
+  model                  String?              @db.VarChar(160)
+  analyzedAt             DateTime?            @db.Timestamptz(6)
+  createdAt              DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt              DateTime             @updatedAt @db.Timestamptz(6)
+
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Cascade)
+
+  @@index([resumeId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Job {
+  id             String         @id @default(uuid()) @db.Uuid
+  title          String         @db.VarChar(240)
+  company        String         @db.VarChar(200)
+  description    String         @db.Text
+  requiredSkills String[]       @default([])
+  optionalSkills String[]       @default([])
+  location       String?        @db.VarChar(240)
+  remoteStatus   RemoteStatus   @default(UNSPECIFIED)
+  employmentType EmploymentType @default(OTHER)
+  source         JobSource      @default(MANUAL)
+  provider       String?        @db.VarChar(120)
+  externalId     String?        @db.VarChar(255)
+  applicationUrl String?        @db.VarChar(2048)
+  postedAt       DateTime?      @db.Timestamptz(6)
+  expiresAt      DateTime?      @db.Timestamptz(6)
+  createdAt      DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime       @updatedAt @db.Timestamptz(6)
+
+  matches           JobMatch[]
+  applications      Application[]
+  interviewSessions InterviewSession[]
+
+  /// PostgreSQL permits multiple NULLs in this composite unique constraint,
+  /// allowing manual jobs without provider IDs while deduplicating sourced jobs.
+  @@unique([provider, externalId])
+  @@index([source, postedAt])
+  @@index([remoteStatus, employmentType])
+  @@index([location])
+  @@index([expiresAt])
+}
+
+model JobMatch {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  resumeId      String   @db.Uuid
+  jobId         String   @db.Uuid
+  /// Product-defined compatibility score (0-100), not an ATS score or hiring probability.
+  matchScore    Int      @db.SmallInt
+  matchedSkills String[] @default([])
+  missingSkills String[] @default([])
+  explanation   String?  @db.Text
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  resume Resume @relation(fields: [resumeId], references: [id], onDelete: Restrict)
+  job    Job    @relation(fields: [jobId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, resumeId, jobId])
+  @@index([userId, createdAt])
+  @@index([jobId, matchScore])
+}
+
+model LearningRoadmap {
+  id               String                  @id @default(uuid()) @db.Uuid
+  userId           String                  @db.Uuid
+  sourceResumeId   String?                 @db.Uuid
+  targetRole       String                  @db.VarChar(200)
+  skillGaps        String[]                @default([])
+  generationSource RoadmapGenerationSource @default(DETERMINISTIC)
+  status           RoadmapStatus           @default(DRAFT)
+  generatedAt      DateTime?               @db.Timestamptz(6)
+  createdAt        DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                @updatedAt @db.Timestamptz(6)
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sourceResume Resume?       @relation("RoadmapSourceResume", fields: [sourceResumeId], references: [id], onDelete: SetNull)
+  items        RoadmapItem[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@index([sourceResumeId])
+}
+
+model RoadmapItem {
+  id                   String            @id @default(uuid()) @db.Uuid
+  roadmapId            String            @db.Uuid
+  order                Int
+  title                String            @db.VarChar(240)
+  description          String            @db.Text
+  learningResources    Json?             @db.JsonB
+  estimatedEffortHours Decimal?          @db.Decimal(7, 2)
+  priority             RoadmapPriority   @default(MEDIUM)
+  status               RoadmapItemStatus @default(NOT_STARTED)
+  completedAt          DateTime?         @db.Timestamptz(6)
+  createdAt            DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime          @updatedAt @db.Timestamptz(6)
+
+  roadmap LearningRoadmap @relation(fields: [roadmapId], references: [id], onDelete: Cascade)
+
+  @@unique([roadmapId, order])
+  @@index([roadmapId, status])
+  @@index([roadmapId, priority])
+}
+
+model Application {
+  id        String            @id @default(uuid()) @db.Uuid
+  userId    String            @db.Uuid
+  jobId     String?           @db.Uuid
+  resumeId  String?           @db.Uuid
+  company   String            @db.VarChar(200)
+  role      String            @db.VarChar(240)
+  status    ApplicationStatus @default(APPLIED)
+  appliedAt DateTime?         @db.Timestamptz(6)
+  notes     String?           @db.Text
+  createdAt DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime          @updatedAt @db.Timestamptz(6)
+
+  user          User                       @relation(fields: [userId], references: [id], onDelete: Restrict)
+  job           Job?                       @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  resume        Resume?                    @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  statusHistory ApplicationStatusHistory[]
+
+  @@index([userId, status])
+  @@index([userId, appliedAt])
+  @@index([jobId])
+  @@index([resumeId])
+}
+
+model ApplicationStatusHistory {
+  id            String             @id @default(uuid()) @db.Uuid
+  applicationId String             @db.Uuid
+  fromStatus    ApplicationStatus?
+  toStatus      ApplicationStatus
+  note          String?            @db.Text
+  createdAt     DateTime           @default(now()) @db.Timestamptz(6)
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  @@index([applicationId, createdAt])
+}
+
+model InterviewSession {
+  id          String                 @id @default(uuid()) @db.Uuid
+  userId      String                 @db.Uuid
+  jobId       String?                @db.Uuid
+  resumeId    String?                @db.Uuid
+  type        InterviewType
+  targetRole  String                 @db.VarChar(200)
+  difficulty  InterviewDifficulty    @default(INTERMEDIATE)
+  status      InterviewSessionStatus @default(IN_PROGRESS)
+  startedAt   DateTime               @default(now()) @db.Timestamptz(6)
+  completedAt DateTime?              @db.Timestamptz(6)
+  createdAt   DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime               @updatedAt @db.Timestamptz(6)
+
+  user      User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  job       Job?                @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  resume    Resume?             @relation(fields: [resumeId], references: [id], onDelete: SetNull)
+  questions InterviewQuestion[]
+
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@index([jobId])
+  @@index([resumeId])
+}
+
+model InterviewQuestion {
+  id             String                @id @default(uuid()) @db.Uuid
+  sessionId      String                @db.Uuid
+  order          Int
+  type           InterviewQuestionType @default(OTHER)
+  prompt         String                @db.Text
+  expectedAnswer String?               @db.Text
+  createdAt      DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime              @updatedAt @db.Timestamptz(6)
+
+  session InterviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  answer  InterviewAnswer?
+
+  @@unique([sessionId, order])
+  @@index([sessionId, type])
+}
+
+model InterviewAnswer {
+  id                 String   @id @default(uuid()) @db.Uuid
+  questionId         String   @unique @db.Uuid
+  content            String   @db.Text
+  evaluationFeedback String?  @db.Text
+  evaluation         Json?    @db.JsonB
+  score              Int?     @db.SmallInt
+  provider           String?  @db.VarChar(100)
+  model              String?  @db.VarChar(160)
+  answeredAt         DateTime @default(now()) @db.Timestamptz(6)
+  createdAt          DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime @updatedAt @db.Timestamptz(6)
+
+  question InterviewQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model Conversation {
+  id        String             @id @default(uuid()) @db.Uuid
+  userId    String             @db.Uuid
+  title     String?            @db.VarChar(240)
+  status    ConversationStatus @default(ACTIVE)
+  createdAt DateTime           @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime           @updatedAt @db.Timestamptz(6)
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  messages Message[]
+
+  @@index([userId, status, updatedAt])
+  @@index([userId, createdAt])
+}
+
+model Message {
+  id             String      @id @default(uuid()) @db.Uuid
+  conversationId String      @db.Uuid
+  sequence       Int
+  role           MessageRole
+  content        String      @db.Text
+  provider       String?     @db.VarChar(100)
+  model          String?     @db.VarChar(160)
+  inputTokens    Int?
+  outputTokens   Int?
+  metadata       Json?       @db.JsonB
+  createdAt      DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime    @updatedAt @db.Timestamptz(6)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, sequence])
+  @@index([conversationId, createdAt])
+}

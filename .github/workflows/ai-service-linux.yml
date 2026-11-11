@@ -1,0 +1,45 @@
+name: AI service Linux validation
+
+on:
+  push:
+    paths:
+      - "ai-service/**"
+      - ".github/workflows/ai-service-linux.yml"
+  pull_request:
+    paths:
+      - "ai-service/**"
+      - ".github/workflows/ai-service-linux.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CAREERPILOT_ONNX_REMOTE_TEST: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ai-service/requirements.txt
+      - name: Install pinned dependencies
+        run: python -m pip install --requirement ai-service/requirements.txt
+      - name: Check Linux CPU AVX2 support
+        run: |
+          python -c "import cpuinfo, sys; flags=set(cpuinfo.get_cpu_info().get('flags', [])); print('AVX2 available:', 'avx2' in flags); sys.exit(0 if 'avx2' in flags else 1)"
+      - name: Download model and validate ONNX CPU embeddings
+        working-directory: ai-service
+        env:
+          CAREERPILOT_RUN_ONNX_SMOKE: "1"
+        run: python -m pytest -q tests/test_onnx_model_smoke.py -s
+      - name: Run offline AI-service tests with native asyncpg
+        working-directory: ai-service
+        run: python -m pytest -q
+      - name: Compile AI-service Python modules
+        working-directory: ai-service
+        run: python -m compileall -q app main.py tests

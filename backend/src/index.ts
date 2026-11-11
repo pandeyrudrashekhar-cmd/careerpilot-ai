@@ -1,41 +1,35 @@
-import express from 'express'
-import cors from 'cors'
-import helmet from 'helmet'
+import { config } from './config/env'
+import app from './app'
 
-const app = express()
-const PORT = process.env.PORT || 3001
+const server = app.listen(config.port, () => {
+  console.info(`[server] CareerPilot AI backend listening at http://localhost:${config.port}`)
+})
 
-// ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(helmet())
-app.use(cors())
-app.use(express.json())
+server.on('error', (error: NodeJS.ErrnoException) => {
+  console.error(`[server] Failed to start: ${error.message}`)
+  process.exitCode = 1
+})
 
-// ─── Health Check ─────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'careerpilot-backend',
-    timestamp: new Date().toISOString(),
+let isShuttingDown = false
+
+function shutdown(signal: NodeJS.Signals): void {
+  if (isShuttingDown) {
+    return
+  }
+
+  isShuttingDown = true
+  console.info(`[server] Received ${signal}; shutting down gracefully`)
+
+  server.close((error) => {
+    if (error) {
+      console.error('[server] Error while shutting down:', error.message)
+      process.exitCode = 1
+      return
+    }
+
+    console.info('[server] Shutdown complete')
   })
-})
+}
 
-// ─── API Routes (placeholder — to be implemented in Phase 2) ─────────────────
-app.get('/api', (_req, res) => {
-  res.json({
-    message: 'CareerPilot AI Backend API',
-    version: '0.1.0',
-    docs: '/api/docs',
-  })
-})
-
-// ─── 404 Handler ─────────────────────────────────────────────────────────────
-app.use((_req, res) => {
-  res.status(404).json({ error: 'Route not found' })
-})
-
-// ─── Start Server ─────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`🚀 Backend running at http://localhost:${PORT}`)
-})
-
-export default app
+process.once('SIGINT', () => shutdown('SIGINT'))
+process.once('SIGTERM', () => shutdown('SIGTERM'))
