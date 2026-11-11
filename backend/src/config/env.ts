@@ -6,18 +6,63 @@ const optionalUrl = z.preprocess(
   z.string().url().optional()
 )
 
+const renderInternalAiServiceHostname = /^careerpilot-ai-service(?:-[a-z0-9]{4})?$/
+
+function isSupportedProductionAiServiceUrl(value: string): boolean | undefined {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:'
+      || (
+        url.protocol === 'http:'
+        && url.port === '10000'
+        && renderInternalAiServiceHostname.test(url.hostname)
+      )
+  } catch {
+    return undefined
+  }
+}
+
 const optionalRenderServiceUrl = z.preprocess(
   (value) => {
-    if (
-      typeof value === 'string'
-      && value.endsWith('.onrender.com')
-      && !value.includes('://')
-    ) {
-      return `https://${value}`
+    if (typeof value !== 'string') return value
+    const hostname = value.trim()
+    if (!hostname) return undefined
+    if (renderInternalAiServiceHostname.test(hostname)) {
+      return `http://${hostname}:10000`
     }
-    return value === '' ? undefined : value
+    if (/^[a-z0-9][a-z0-9-]*\.onrender\.com$/i.test(hostname)) {
+      return `https://${hostname}`
+    }
+    return hostname
   },
-  z.string().url().optional()
+  z.string().optional().superRefine((value, context) => {
+    if (!value) return
+    if (/\s/.test(value)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'must not contain whitespace',
+      })
+      return
+    }
+
+    let url: URL
+    try {
+      url = new URL(value)
+    } catch {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'must be a valid absolute HTTP or HTTPS URL',
+      })
+      return
+    }
+
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'must use HTTP or HTTPS',
+      })
+    }
+  })
 )
 
 const environmentSchema = z.object({
@@ -57,12 +102,12 @@ const environmentSchema = z.object({
   if (
     environment.NODE_ENV === 'production'
     && environment.AI_SERVICE_URL
-    && new URL(environment.AI_SERVICE_URL).protocol !== 'https:'
+    && isSupportedProductionAiServiceUrl(environment.AI_SERVICE_URL) === false
   ) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['AI_SERVICE_URL'],
-      message: 'must use HTTPS when NODE_ENV is production',
+      message: 'must use HTTPS or the supported Render internal service URL when NODE_ENV is production',
     })
   }
 })

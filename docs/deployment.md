@@ -71,9 +71,9 @@ Blueprint.
 
    The branch is pinned to `master` on both services in `render.yaml`. The
    backend's `AI_SERVICE_URL` is linked to the AI service's Render `host`
-   reference; the backend recognizes the bare `.onrender.com` hostname and
-   upgrades it to HTTPS before production validation. Do not replace it with a
-   localhost address.
+   reference. The backend accepts its private hostname as
+   `http://<private-hostname>:10000`; a public `.onrender.com` hostname is
+   normalized to HTTPS. Do not replace it with a localhost address.
 3. Create/review the Blueprint services. Do not enable production traffic until
    all manual values below are entered and verified. `sync: false` values are
    intentionally prompted for manually; they are not stored in the repository.
@@ -103,7 +103,7 @@ worker unless memory and CPU are measured on the target plan.
 | `NODE_VERSION` | Blueprint default: `24.16.0`; also pinned by `backend/.node-version`. |
 | `PORT` | Supplied by Render; the backend reads this value and binds its Express listener to it. |
 | `FRONTEND_URL` | Manually enter the exact Vercel production origin, for example `https://<your-project>.vercel.app`, with no path or trailing slash. This is the CORS allowlist; previews are not implicitly allowed. |
-| `AI_SERVICE_URL` | Render Blueprint reference to `careerpilot-ai-service` host. Verify it resolves to the AI service's HTTPS `.onrender.com` origin. |
+| `AI_SERVICE_URL` | Render Blueprint reference to `careerpilot-ai-service` host. A private Render hostname uses internal HTTP on port `10000`; a public `.onrender.com` hostname uses HTTPS. |
 | `AI_SERVICE_INTERNAL_TOKEN` | Manually enter the same random value used by the AI service. |
 | `DATABASE_URL` | Manually enter the Supabase transaction-pooler connection URL. |
 | `DIRECT_URL` | Manually enter the Supabase session/direct connection URL. |
